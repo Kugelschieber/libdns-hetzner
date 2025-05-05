@@ -21,22 +21,22 @@ var (
 type testRecordsCleanup = func()
 
 func setupTestRecords(t *testing.T, p *hetzner.Provider) ([]libdns.Record, testRecordsCleanup) {
-	testRecords := []libdns.Record{
+	testRecords := []libdns.RR{
 		{
-			Type:  "TXT",
-			Name:  "test1",
-			Value: "test1",
-			TTL:   ttl,
+			Type: "TXT",
+			Name: "test1",
+			Data: "test1",
+			TTL:  ttl,
 		}, {
-			Type:  "TXT",
-			Name:  "test2",
-			Value: "test2",
-			TTL:   ttl,
+			Type: "TXT",
+			Name: "test2",
+			Data: "test2",
+			TTL:  ttl,
 		}, {
-			Type:  "TXT",
-			Name:  "test3",
-			Value: "test3",
-			TTL:   ttl,
+			Type: "TXT",
+			Name: "test3",
+			Data: "test3",
+			TTL:  ttl,
 		},
 	}
 
@@ -147,7 +147,7 @@ func Test_AppendRecords(t *testing.T) {
 					t.Fatalf("r.Name != c.exptected[%d].Name => %s != %s", k, r.Name, c.expected[k].Name)
 				}
 				if r.Value != c.expected[k].Value {
-					t.Fatalf("r.Value != c.exptected[%d].Value => %s != %s", k, r.Value, c.expected[k].Value)
+					t.Fatalf("r.Data != c.exptected[%d].Data => %s != %s", k, r.Value, c.expected[k].Value)
 				}
 				if r.TTL != c.expected[k].TTL {
 					t.Fatalf("r.TTL != c.exptected[%d].TTL => %s != %s", k, r.TTL, c.expected[k].TTL)
@@ -183,7 +183,7 @@ func Test_DeleteRecords(t *testing.T) {
 		}
 
 		if foundRecord == nil {
-			t.Fatalf("Record not found => %s", testRecord.ID)
+			t.Fatalf("record not found => %s", testRecord.ID)
 		}
 	}
 }
@@ -214,7 +214,7 @@ func Test_GetRecords(t *testing.T) {
 		}
 
 		if foundRecord == nil {
-			t.Fatalf("Record not found => %s", testRecord.ID)
+			t.Fatalf("record not found => %s", testRecord.ID)
 		}
 	}
 }
@@ -254,6 +254,6 @@ func Test_SetRecords(t *testing.T) {
 	}
 
 	if records[0].Value != "new_value" {
-		t.Fatalf(`records[0].Value != "new_value" => %s != "new_value"`, records[0].Value)
+		t.Fatalf(`records[0].Data != "new_value" => %s != "new_value"`, records[0].Value)
 	}
 }

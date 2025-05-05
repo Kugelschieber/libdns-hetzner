@@ -3,45 +3,61 @@ package hetzner
 import (
 	"context"
 	"strings"
+	"sync"
 
 	"github.com/libdns/libdns"
 )
 
-// Provider implements the libdns interfaces for Hetzner
+// Provider implements the libdns interfaces for Hetzner.
 type Provider struct {
 	// AuthAPIToken is the Hetzner Auth API token - see https://dns.hetzner.com/api-docs#section/Authentication/Auth-API-Token
 	AuthAPIToken string `json:"auth_api_token"`
+
+	client *Client
+	once   sync.Once
 }
 
-// GetRecords lists all the records in the zone.
+// New returns a new libdns provider for Hetzner.
+func New(token string) *Provider {
+	return &Provider{
+		AuthAPIToken: token,
+		client:       NewClient(token),
+	}
+}
+
+// GetRecords  implements the libdns.RecordGetter interface.
 func (p *Provider) GetRecords(ctx context.Context, zone string) ([]libdns.Record, error) {
-	records, err := getAllRecords(ctx, p.AuthAPIToken, unFQDN(zone))
+	records, err := p.client.GetAllRecords(ctx, unFQDN(zone))
+
 	if err != nil {
 		return nil, err
 	}
 
-	return records, nil
+	return []libdns.Record(records), nil
 }
 
-// AppendRecords adds records to the zone. It returns the records that were added.
+// AppendRecords implements the libdns.RecordAppender interface.
 func (p *Provider) AppendRecords(ctx context.Context, zone string, records []libdns.Record) ([]libdns.Record, error) {
 	var appendedRecords []libdns.Record
 
-	for _, record := range records {
-		newRecord, err := createRecord(ctx, p.AuthAPIToken, unFQDN(zone), record)
+	for _, r := range records {
+		newRecord, err := p.client.CreateRecord(ctx, unFQDN(zone), r)
+
 		if err != nil {
 			return nil, err
 		}
+
 		appendedRecords = append(appendedRecords, newRecord)
 	}
 
 	return appendedRecords, nil
 }
 
-// DeleteRecords deletes the records from the zone.
+// DeleteRecords implements the libdns.RecordDeleter interface.
 func (p *Provider) DeleteRecords(ctx context.Context, _ string, records []libdns.Record) ([]libdns.Record, error) {
-	for _, record := range records {
-		err := deleteRecord(ctx, p.AuthAPIToken, record)
+	for _, r := range records {
+		err := p.client.DeleteRecord(ctx, r)
+
 		if err != nil {
 			return nil, err
 		}
@@ -50,20 +66,34 @@ func (p *Provider) DeleteRecords(ctx context.Context, _ string, records []libdns
 	return records, nil
 }
 
-// SetRecords sets the records in the zone, either by updating existing records
-// or creating new ones. It returns the updated records.
+// SetRecords implements the libdns.RecordSetter interface.
 func (p *Provider) SetRecords(ctx context.Context, zone string, records []libdns.Record) ([]libdns.Record, error) {
 	var setRecords []libdns.Record
 
-	for _, record := range records {
-		setRecord, err := createOrUpdateRecord(ctx, p.AuthAPIToken, unFQDN(zone), record)
+	for _, r := range records {
+		setRecord, err := p.client.CreateOrUpdateRecord(ctx, unFQDN(zone), r)
+
 		if err != nil {
 			return setRecords, err
 		}
+
 		setRecords = append(setRecords, setRecord)
 	}
 
 	return setRecords, nil
+}
+
+// getClient initializes the client for the provider.
+func (p *Provider) getClient() *Client {
+	p.once.Do(func() {
+		if p.AuthAPIToken == "" {
+			panic("hetzner: api token missing")
+		}
+
+		p.client = NewClient(p.AuthAPIToken)
+	})
+
+	return p.client
 }
 
 // unFQDN trims any trailing "." from fqdn. Hetzner's API does not use FQDNs.

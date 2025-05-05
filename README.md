@@ -37,11 +37,8 @@ func main() {
 		return
 	}
 
-	p := &hetzner.Provider{
-		AuthAPIToken: token,
-	}
-
-	records, err := p.GetRecords(context.WithTimeout(context.Background(), time.Duration(15*time.Second)), zone)
+	p := hetzner.New(token)
+	records, err := p.GetRecords(context.WithTimeout(context.Background(), time.Second * 15), zone)
 	if err != nil {
         fmt.Printf("Error: %s", err.Error())
         return
