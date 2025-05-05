@@ -2,7 +2,7 @@ package hetzner
 
 import (
 	"context"
-	"strings"
+	"fmt"
 	"sync"
 
 	"github.com/libdns/libdns"
@@ -33,51 +33,121 @@ func (p *Provider) GetRecords(ctx context.Context, zone string) ([]libdns.Record
 		return nil, err
 	}
 
-	return []libdns.Record(records), nil
+	results := make([]libdns.Record, 0, len(records))
+
+	for _, r := range records {
+		rr, err := r.Parse(zone)
+
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse record: %w", err)
+		}
+
+		results = append(results, rr)
+	}
+
+	return results, nil
 }
 
 // AppendRecords implements the libdns.RecordAppender interface.
 func (p *Provider) AppendRecords(ctx context.Context, zone string, records []libdns.Record) ([]libdns.Record, error) {
-	var appendedRecords []libdns.Record
+	appendedRecords := make([]libdns.Record, 0, len(records))
 
 	for _, r := range records {
-		newRecord, err := p.client.CreateRecord(ctx, unFQDN(zone), r)
+		rr := r.RR()
+		response, err := p.client.CreateRecord(ctx, unFQDN(zone), Record{
+			Type:  rr.Type,
+			Name:  rr.Name,
+			Value: rr.Data,
+			TTL:   int(rr.TTL.Seconds()),
+		})
 
 		if err != nil {
-			return nil, err
+			return appendedRecords, err
 		}
 
-		appendedRecords = append(appendedRecords, newRecord)
+		record, err := response.Parse(zone)
+
+		if err != nil {
+			return appendedRecords, fmt.Errorf("failed to parse record: %w", err)
+		}
+
+		appendedRecords = append(appendedRecords, record)
 	}
 
 	return appendedRecords, nil
 }
 
 // DeleteRecords implements the libdns.RecordDeleter interface.
-func (p *Provider) DeleteRecords(ctx context.Context, _ string, records []libdns.Record) ([]libdns.Record, error) {
-	for _, r := range records {
-		err := p.client.DeleteRecord(ctx, r)
+func (p *Provider) DeleteRecords(ctx context.Context, zone string, records []libdns.Record) ([]libdns.Record, error) {
+	allRecords, err := p.client.GetAllRecords(ctx, unFQDN(zone))
 
-		if err != nil {
-			return nil, err
-		}
+	if err != nil {
+		return nil, err
 	}
 
-	return records, nil
+	deletedRecords := make([]libdns.Record, 0, len(records))
+
+	for _, r := range records {
+		id := p.findRecordID(allRecords, r)
+
+		if id == "" {
+			return deletedRecords, fmt.Errorf("record ID not found: %s", r.RR().Name)
+		}
+
+		if err := p.client.DeleteRecord(ctx, id); err != nil {
+			return deletedRecords, err
+		}
+
+		deletedRecords = append(deletedRecords, r)
+	}
+
+	return deletedRecords, nil
 }
 
 // SetRecords implements the libdns.RecordSetter interface.
 func (p *Provider) SetRecords(ctx context.Context, zone string, records []libdns.Record) ([]libdns.Record, error) {
-	var setRecords []libdns.Record
+	allRecords, err := p.client.GetAllRecords(ctx, unFQDN(zone))
+
+	if err != nil {
+		return nil, err
+	}
+
+	setRecords := make([]libdns.Record, 0, len(records))
 
 	for _, r := range records {
-		setRecord, err := p.client.CreateOrUpdateRecord(ctx, unFQDN(zone), r)
+		var response Record
+		var err error
+		rr := r.RR()
+		id := p.findRecordID(allRecords, r)
+
+		if id == "" {
+			response, err = p.client.CreateRecord(ctx, unFQDN(zone), Record{
+				Type:  rr.Type,
+				Name:  rr.Name,
+				Value: rr.Data,
+				TTL:   int(rr.TTL.Seconds()),
+			})
+		} else {
+			response, err = p.client.UpdateRecord(ctx, unFQDN(zone), Record{
+				ID:    id,
+				Type:  rr.Type,
+				Name:  rr.Name,
+				Value: rr.Data,
+				TTL:   int(rr.TTL.Seconds()),
+			})
+		}
 
 		if err != nil {
 			return setRecords, err
 		}
 
-		setRecords = append(setRecords, setRecord)
+		result, err := response.Parse(zone)
+
+		if err != nil {
+			return setRecords, fmt.Errorf("failed to parse record: %w", err)
+		}
+
+		setRecords = append(setRecords, result)
 	}
 
 	return setRecords, nil
@@ -96,9 +166,20 @@ func (p *Provider) getClient() *Client {
 	return p.client
 }
 
-// unFQDN trims any trailing "." from fqdn. Hetzner's API does not use FQDNs.
-func unFQDN(fqdn string) string {
-	return strings.TrimSuffix(fqdn, ".")
+// findRecordID searches for a record using the name and type of the record to be found.
+// It returns the record ID if found, otherwise an empty string.
+func (p *Provider) findRecordID(allRecords []Record, r libdns.Record) string {
+	rr := r.RR()
+	var id string
+
+	for _, record := range allRecords {
+		if record.Name == rr.Name && record.Type == rr.Type {
+			id = record.ID
+			break
+		}
+	}
+
+	return id
 }
 
 // Interface guards

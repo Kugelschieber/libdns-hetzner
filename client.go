@@ -24,6 +24,7 @@ func NewClient(accessToken string) *Client {
 	}
 }
 
+// GetZoneID returns the zone ID for the given zone name.
 func (c *Client) GetZoneID(ctx context.Context, zone string) (string, error) {
 	req, err := http.NewRequestWithContext(ctx, "GET", fmt.Sprintf("https://dns.hetzner.com/api/v1/zones?name=%s", url.QueryEscape(zone)), nil)
 	data, err := c.doRequest(req)
@@ -47,6 +48,7 @@ func (c *Client) GetZoneID(ctx context.Context, zone string) (string, error) {
 	return result.Zones[0].ID, nil
 }
 
+// GetAllRecords returns all records for the given zone.
 func (c *Client) GetAllRecords(ctx context.Context, zone string) ([]Record, error) {
 	zoneID, err := c.GetZoneID(ctx, zone)
 
@@ -73,17 +75,18 @@ func (c *Client) GetAllRecords(ctx context.Context, zone string) ([]Record, erro
 
 	for _, r := range result.Records {
 		records = append(records, Record{
-			ID:   r.ID,
-			Type: r.Type,
-			Name: r.Name,
-			Data: r.Data,
-			TTL:  r.TTL,
+			ID:    r.ID,
+			Type:  r.Type,
+			Name:  r.Name,
+			Value: r.Value,
+			TTL:   r.TTL,
 		})
 	}
 
 	return records, nil
 }
 
+// CreateRecord creates a record for the given zone.
 func (c *Client) CreateRecord(ctx context.Context, zone string, r Record) (Record, error) {
 	zoneID, err := c.GetZoneID(ctx, zone)
 
@@ -91,15 +94,9 @@ func (c *Client) CreateRecord(ctx context.Context, zone string, r Record) (Recor
 		return Record{}, err
 	}
 
-	reqData := Record{
-		ZoneID: zoneID,
-		Type:   r.Type,
-		Name:   c.normalizeRecordName(r.Name, zone),
-		Data:   r.Data,
-		TTL:    r.TTL,
-	}
-
-	reqBuffer, err := json.Marshal(reqData)
+	r.ZoneID = zoneID
+	r.Name = c.normalizeRecordName(r.Name, zone)
+	reqBuffer, err := json.Marshal(r)
 
 	if err != nil {
 		return Record{}, err
@@ -121,16 +118,17 @@ func (c *Client) CreateRecord(ctx context.Context, zone string, r Record) (Recor
 	}
 
 	return Record{
-		ID:   result.Record.ID,
-		Type: result.Record.Type,
-		Name: result.Record.Name,
-		Data: result.Record.Data,
-		TTL:  result.Record.TTL,
+		ID:    result.Record.ID,
+		Type:  result.Record.Type,
+		Name:  result.Record.Name,
+		Value: result.Record.Value,
+		TTL:   result.Record.TTL,
 	}, nil
 }
 
-func (c *Client) DeleteRecord(ctx context.Context, record Record) error {
-	req, err := http.NewRequestWithContext(ctx, "DELETE", fmt.Sprintf("https://dns.hetzner.com/api/v1/records/%s", record.ID), nil)
+// DeleteRecord deletes a record for the given ID and zone.
+func (c *Client) DeleteRecord(ctx context.Context, id string) error {
+	req, err := http.NewRequestWithContext(ctx, "DELETE", fmt.Sprintf("https://dns.hetzner.com/api/v1/records/%s", id), nil)
 
 	if err != nil {
 		return err
@@ -143,6 +141,7 @@ func (c *Client) DeleteRecord(ctx context.Context, record Record) error {
 	return nil
 }
 
+// UpdateRecord updates a record for the given zone.
 func (c *Client) UpdateRecord(ctx context.Context, zone string, r Record) (Record, error) {
 	zoneID, err := c.GetZoneID(ctx, zone)
 
@@ -154,7 +153,7 @@ func (c *Client) UpdateRecord(ctx context.Context, zone string, r Record) (Recor
 		ZoneID: zoneID,
 		Type:   r.Type,
 		Name:   c.normalizeRecordName(r.Name, zone),
-		Data:   r.Data,
+		Value:  r.Value,
 		TTL:    r.TTL,
 	}
 
@@ -185,20 +184,12 @@ func (c *Client) UpdateRecord(ctx context.Context, zone string, r Record) (Recor
 	}
 
 	return Record{
-		ID:   result.Record.ID,
-		Type: result.Record.Type,
-		Name: result.Record.Name,
-		Data: result.Record.Data,
-		TTL:  result.Record.TTL,
+		ID:    result.Record.ID,
+		Type:  result.Record.Type,
+		Name:  result.Record.Name,
+		Value: result.Record.Value,
+		TTL:   result.Record.TTL,
 	}, nil
-}
-
-func (c *Client) CreateOrUpdateRecord(ctx context.Context, zone string, r Record) (Record, error) {
-	if len(r.ID) == 0 {
-		return c.CreateRecord(ctx, zone, r)
-	}
-
-	return c.UpdateRecord(ctx, zone, r)
 }
 
 func (c *Client) doRequest(request *http.Request) ([]byte, error) {

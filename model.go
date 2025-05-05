@@ -16,7 +16,7 @@ type Record struct {
 	ZoneID string `json:"zone_id,omitempty"`
 	Type   string `json:"type"`
 	Name   string `json:"name"`
-	Data   string `json:"data"`
+	Value  string `json:"value"`
 	TTL    int    `json:"ttl"`
 }
 
@@ -26,6 +26,22 @@ func (r *Record) RR() libdns.RR {
 		Name: r.Name,
 		TTL:  time.Duration(r.TTL) * time.Second,
 		Type: r.Type,
-		Data: r.Data,
+		Data: r.Value,
 	}
+}
+
+// Parse parses a record from the Hetzner API response into libdns.Record.
+func (r *Record) Parse(zone string) (libdns.Record, error) {
+	rr, err := libdns.RR{
+		Name: libdns.RelativeName(r.Name, zone),
+		TTL:  time.Duration(r.TTL) * time.Second,
+		Type: r.Type,
+		Data: r.Value,
+	}.Parse()
+
+	if err != nil {
+		return nil, err
+	}
+
+	return rr, nil
 }
