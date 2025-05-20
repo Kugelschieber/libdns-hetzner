@@ -27,6 +27,11 @@ func NewClient(accessToken string) *Client {
 // GetZoneID returns the zone ID for the given zone name.
 func (c *Client) GetZoneID(ctx context.Context, zone string) (string, error) {
 	req, err := http.NewRequestWithContext(ctx, "GET", fmt.Sprintf("https://dns.hetzner.com/api/v1/zones?name=%s", url.QueryEscape(zone)), nil)
+
+	if err != nil {
+		return "", err
+	}
+
 	data, err := c.doRequest(req)
 
 	if err != nil {
@@ -57,6 +62,11 @@ func (c *Client) GetAllRecords(ctx context.Context, zone string) ([]Record, erro
 	}
 
 	req, err := http.NewRequestWithContext(ctx, "GET", fmt.Sprintf("https://dns.hetzner.com/api/v1/records?zone_id=%s", zoneID), nil)
+
+	if err != nil {
+		return nil, err
+	}
+
 	data, err := c.doRequest(req)
 
 	if err != nil {
@@ -103,6 +113,11 @@ func (c *Client) CreateRecord(ctx context.Context, zone string, r Record) (Recor
 	}
 
 	req, err := http.NewRequestWithContext(ctx, "POST", "https://dns.hetzner.com/api/v1/records", bytes.NewBuffer(reqBuffer))
+
+	if err != nil {
+		return Record{}, err
+	}
+
 	data, err := c.doRequest(req)
 
 	if err != nil {
