@@ -21,13 +21,12 @@ type Provider struct {
 func New(token string) *Provider {
 	return &Provider{
 		AuthAPIToken: token,
-		client:       NewClient(token),
 	}
 }
 
 // GetRecords  implements the libdns.RecordGetter interface.
 func (p *Provider) GetRecords(ctx context.Context, zone string) ([]libdns.Record, error) {
-	records, err := p.client.GetAllRecords(ctx, unFQDN(zone))
+	records, err := p.getClient().GetAllRecords(ctx, unFQDN(zone))
 
 	if err != nil {
 		return nil, err
@@ -54,7 +53,7 @@ func (p *Provider) AppendRecords(ctx context.Context, zone string, records []lib
 
 	for _, r := range records {
 		rr := r.RR()
-		response, err := p.client.CreateRecord(ctx, unFQDN(zone), Record{
+		response, err := p.getClient().CreateRecord(ctx, unFQDN(zone), Record{
 			Type:  rr.Type,
 			Name:  rr.Name,
 			Value: rr.Data,
@@ -79,7 +78,7 @@ func (p *Provider) AppendRecords(ctx context.Context, zone string, records []lib
 
 // DeleteRecords implements the libdns.RecordDeleter interface.
 func (p *Provider) DeleteRecords(ctx context.Context, zone string, records []libdns.Record) ([]libdns.Record, error) {
-	allRecords, err := p.client.GetAllRecords(ctx, unFQDN(zone))
+	allRecords, err := p.getClient().GetAllRecords(ctx, unFQDN(zone))
 
 	if err != nil {
 		return nil, err
@@ -94,7 +93,7 @@ func (p *Provider) DeleteRecords(ctx context.Context, zone string, records []lib
 			return deletedRecords, fmt.Errorf("record ID not found: %s", r.RR().Name)
 		}
 
-		if err := p.client.DeleteRecord(ctx, id); err != nil {
+		if err := p.getClient().DeleteRecord(ctx, id); err != nil {
 			return deletedRecords, err
 		}
 
@@ -106,7 +105,7 @@ func (p *Provider) DeleteRecords(ctx context.Context, zone string, records []lib
 
 // SetRecords implements the libdns.RecordSetter interface.
 func (p *Provider) SetRecords(ctx context.Context, zone string, records []libdns.Record) ([]libdns.Record, error) {
-	allRecords, err := p.client.GetAllRecords(ctx, unFQDN(zone))
+	allRecords, err := p.getClient().GetAllRecords(ctx, unFQDN(zone))
 
 	if err != nil {
 		return nil, err
@@ -121,14 +120,14 @@ func (p *Provider) SetRecords(ctx context.Context, zone string, records []libdns
 		id := p.findRecordID(allRecords, r)
 
 		if id == "" {
-			response, err = p.client.CreateRecord(ctx, unFQDN(zone), Record{
+			response, err = p.getClient().CreateRecord(ctx, unFQDN(zone), Record{
 				Type:  rr.Type,
 				Name:  rr.Name,
 				Value: rr.Data,
 				TTL:   int(rr.TTL.Seconds()),
 			})
 		} else {
-			response, err = p.client.UpdateRecord(ctx, unFQDN(zone), Record{
+			response, err = p.getClient().UpdateRecord(ctx, unFQDN(zone), Record{
 				ID:    id,
 				Type:  rr.Type,
 				Name:  rr.Name,
